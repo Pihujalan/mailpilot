@@ -1,0 +1,18 @@
+# Python / Backend
+backend/__pycache__/
+backend/.env
+backend/*.sqlite3
+backend/*.db
+backend/mailpilot.db
+*.py[cod]
+
+# Node / Frontend
+frontend/node_modules/
+frontend/.env
+frontend/.env.*
+frontend/dist/
+frontend/build/
+
+# OS
+.DS_Store
+Thumbs.db

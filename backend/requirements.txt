@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+apscheduler
+sqlalchemy
+aiosqlite
+httpx
+python-dotenv
+pydantic
+python-multipart

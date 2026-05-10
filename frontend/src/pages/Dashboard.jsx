@@ -163,7 +163,7 @@ export default function Dashboard({ user }) {
                   </div>
 
                   <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(c.created_at + 'Z'), { addSuffix: true })}
                   </div>
 
                   <ChevronRight size={16} color="var(--muted)" />

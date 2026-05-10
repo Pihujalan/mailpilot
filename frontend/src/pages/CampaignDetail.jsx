@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Mail, MessageSquare, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Mail, MessageSquare, Clock, CheckCircle, XCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 
 const API = 'http://localhost:8000'
 
 const STATUS = {
-  pending:      { color: 'var(--muted)',  icon: Clock,         label: 'Pending' },
-  sent:         { color: '#60a5fa',       icon: Mail,          label: 'Sent' },
-  followup_sent:{ color: 'var(--accent)', icon: RefreshCw,     label: 'Follow-up Sent' },
-  replied:      { color: 'var(--green)',  icon: MessageSquare, label: 'Replied' },
-  failed:       { color: 'var(--accent2)',icon: XCircle,       label: 'Failed' },
+  pending: { color: 'var(--muted)', icon: Clock, label: 'Pending' },
+  sent: { color: '#60a5fa', icon: Mail, label: 'Sent' },
+  followup_sent: { color: 'var(--accent)', icon: RefreshCw, label: 'Follow-up Sent' },
+  replied: { color: 'var(--green)', icon: MessageSquare, label: 'Replied' },
+  failed: { color: 'var(--accent2)', icon: XCircle, label: 'Failed' },
 }
 
 export default function CampaignDetail({ user }) {
@@ -19,6 +19,8 @@ export default function CampaignDetail({ user }) {
   const [campaign, setCampaign] = useState(null)
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (!user) { navigate('/'); return }
@@ -40,6 +42,22 @@ export default function CampaignDetail({ user }) {
     finally { setLoading(false) }
   }
 
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    setDeleting(true)
+    try {
+      await fetch(`${API}/campaigns/${id}?user_id=${user.id}`, { method: 'DELETE' })
+      navigate('/dashboard')
+    } catch (e) {
+      console.error(e)
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
       <div className="spinner" />
@@ -58,15 +76,36 @@ export default function CampaignDetail({ user }) {
 
   return (
     <div className="fade-in" style={{ maxWidth: 800, margin: '0 auto' }}>
-      <button className="btn-ghost" onClick={() => navigate('/dashboard')}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 24, padding: '8px 14px' }}>
-        <ArrowLeft size={15} /> Back to Dashboard
-      </button>
+      {/* Top bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button className="btn-ghost" onClick={() => navigate('/dashboard')}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 14px' }}>
+          <ArrowLeft size={15} /> Back to Dashboard
+        </button>
+
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+            border: `1px solid ${confirmDelete ? 'var(--accent2)' : 'rgba(255,101,132,0.3)'}`,
+            background: confirmDelete ? 'rgba(255,101,132,0.15)' : 'transparent',
+            color: 'var(--accent2)', cursor: deleting ? 'not-allowed' : 'pointer',
+            opacity: deleting ? 0.6 : 1, transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(255,101,132,0.15)'; e.currentTarget.style.borderColor = 'var(--accent2)' } }}
+          onMouseLeave={e => { if (!confirmDelete) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,101,132,0.3)' } }}
+        >
+          <Trash2 size={14} />
+          {deleting ? 'Deleting...' : confirmDelete ? 'Click again to confirm' : 'Delete Campaign'}
+        </button>
+      </div>
 
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{campaign.name}</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 4 }}>
-          {campaign.company_name} · {campaign.target_role} · Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
+          {campaign.company_name} · {campaign.target_role} · Created {formatDistanceToNow(new Date(campaign.created_at + 'Z'), { addSuffix: true })}
         </p>
       </div>
 
@@ -127,16 +166,16 @@ export default function CampaignDetail({ user }) {
                     {cfg.label}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {log.sent_at ? format(new Date(log.sent_at), 'MMM d, h:mm a') : '—'}
+                    {log.sent_at ? format(new Date(log.sent_at + 'Z'), 'MMM d, h:mm a') : '—'}
                   </div>
                   {log.next_followup_at && !log.followup_sent && log.status !== 'replied' && (
                     <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2 }}>
-                      Follow-up: {formatDistanceToNow(new Date(log.next_followup_at), { addSuffix: true })}
+                      Follow-up: {formatDistanceToNow(new Date(log.next_followup_at + 'Z'), { addSuffix: true })}
                     </div>
                   )}
                   {log.replied_at && (
                     <div style={{ fontSize: 10, color: 'var(--green)', marginTop: 2 }}>
-                      Replied {formatDistanceToNow(new Date(log.replied_at), { addSuffix: true })}
+                      Replied {formatDistanceToNow(new Date(log.replied_at + 'Z'), { addSuffix: true })}
                     </div>
                   )}
                 </div>

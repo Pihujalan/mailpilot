@@ -7,62 +7,52 @@ from database import AsyncSessionLocal, Campaign, EmailLog, User
 from email_sender import send_email, check_for_reply
 from datetime import datetime, timedelta
 import uuid
-import json
+import os
 
 scheduler = AsyncIOScheduler()
 
-async def get_user_creds(user_id: str, session: AsyncSession):
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user or not user.access_token:
-        return None, None
-    cred_dict = {
+def _build_cred_dict(user: User) -> dict:
+    """Build a proper credential dict using env vars for client_id/secret."""
+    return {
         "token": user.access_token,
         "refresh_token": user.refresh_token,
         "token_uri": "https://oauth2.googleapis.com/token",
-        "client_id": user.id,  # stored separately
-        "client_secret": "",
-        "scopes": ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"],
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+        "scopes": [
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.readonly",
+        ],
     }
-    return cred_dict, user
 
-async def process_campaign_sending(campaign_id: str):
+
+async def process_campaign_sending(campaign_id: str, is_recurring: bool = False):
     async with AsyncSessionLocal() as session:
         try:
-            # Get campaign
             result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
             campaign = result.scalar_one_or_none()
             if not campaign:
                 return
 
-            # Get user with full credentials
             result = await session.execute(select(User).where(User.id == campaign.user_id))
             user = result.scalar_one_or_none()
             if not user:
                 return
 
-            cred_dict = {
-                "token": user.access_token,
-                "refresh_token": user.refresh_token,
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "client_id": user.id,
-                "client_secret": "",
-                "scopes": ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"],
-            }
-
+            cred_dict = _build_cred_dict(user)
             recipients = campaign.recipient_emails or []
-            
+
             for recipient in recipients:
-                # Check if already sent to this recipient
-                existing = await session.execute(
-                    select(EmailLog).where(
-                        EmailLog.campaign_id == campaign_id,
-                        EmailLog.recipient == recipient,
-                        EmailLog.email_type == "initial"
+                if not is_recurring:
+                    existing = await session.execute(
+                        select(EmailLog).where(
+                            EmailLog.campaign_id == campaign_id,
+                            EmailLog.recipient == recipient,
+                            EmailLog.email_type == "initial"
+                        )
                     )
-                )
-                if existing.scalar_one_or_none():
-                    continue
+                    if existing.scalar_one_or_none():
+                        continue
 
                 result = await send_email(
                     cred_dict=cred_dict,
@@ -87,11 +77,11 @@ async def process_campaign_sending(campaign_id: str):
                 )
                 session.add(log)
 
-                # Update user tokens if refreshed
                 if result.get("updated_creds"):
                     await session.execute(
                         update(User).where(User.id == user.id).values(
-                            access_token=result["updated_creds"]["token"]
+                            access_token=result["updated_creds"]["token"],
+                            refresh_token=result["updated_creds"].get("refresh_token") or user.refresh_token,
                         )
                     )
 
@@ -99,17 +89,19 @@ async def process_campaign_sending(campaign_id: str):
                 update(Campaign).where(Campaign.id == campaign_id).values(status="active")
             )
             await session.commit()
+            print(f"Campaign {campaign_id} sending complete (recurring={is_recurring})")
 
         except Exception as e:
             print(f"Error processing campaign {campaign_id}: {e}")
 
+
 async def check_replies_job():
-    """Runs every 30 minutes to check for replies"""
+    """Runs every 2 minutes to check for replies."""
     async with AsyncSessionLocal() as session:
         try:
             result = await session.execute(
                 select(EmailLog).where(
-                    EmailLog.status == "sent",
+                    EmailLog.status.in_(["sent", "followup_sent"]),
                     EmailLog.gmail_thread_id.isnot(None)
                 )
             )
@@ -121,16 +113,14 @@ async def check_replies_job():
                 if not user:
                     continue
 
-                cred_dict = {
-                    "token": user.access_token,
-                    "refresh_token": user.refresh_token,
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "client_id": user.id,
-                    "client_secret": "",
-                    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
-                }
+                cred_dict = _build_cred_dict(user)
 
-                has_reply = await check_for_reply(cred_dict, log.gmail_thread_id, log.gmail_message_id)
+                has_reply = await check_for_reply(
+                    cred_dict,
+                    log.gmail_thread_id,
+                    log.gmail_message_id,
+                    user.email,
+                )
                 if has_reply:
                     await session.execute(
                         update(EmailLog).where(EmailLog.id == log.id).values(
@@ -145,8 +135,9 @@ async def check_replies_job():
         except Exception as e:
             print(f"Error in reply check job: {e}")
 
+
 async def send_followups_job():
-    """Runs every hour to send scheduled follow-ups"""
+    """Runs every hour to send scheduled follow-ups."""
     async with AsyncSessionLocal() as session:
         try:
             now = datetime.utcnow()
@@ -160,7 +151,6 @@ async def send_followups_job():
             logs = result.scalars().all()
 
             for log in logs:
-                # Get campaign for followup content
                 camp_result = await session.execute(select(Campaign).where(Campaign.id == log.campaign_id))
                 campaign = camp_result.scalar_one_or_none()
                 if not campaign or not campaign.followup_body:
@@ -171,16 +161,9 @@ async def send_followups_job():
                 if not user:
                     continue
 
-                cred_dict = {
-                    "token": user.access_token,
-                    "refresh_token": user.refresh_token,
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "client_id": user.id,
-                    "client_secret": "",
-                    "scopes": ["https://www.googleapis.com/auth/gmail.send"],
-                }
+                cred_dict = _build_cred_dict(user)
 
-                result = await send_email(
+                send_result = await send_email(
                     cred_dict=cred_dict,
                     sender_email=user.email,
                     to=log.recipient,
@@ -192,7 +175,7 @@ async def send_followups_job():
                 await session.execute(
                     update(EmailLog).where(EmailLog.id == log.id).values(
                         followup_sent=True,
-                        status="followup_sent" if result["success"] else log.status
+                        status="followup_sent" if send_result["success"] else log.status
                     )
                 )
 
@@ -201,24 +184,46 @@ async def send_followups_job():
         except Exception as e:
             print(f"Error in followup job: {e}")
 
+
 def start_scheduler():
-    scheduler.add_job(check_replies_job, IntervalTrigger(minutes=30), id="reply_checker", replace_existing=True)
+    scheduler.add_job(check_replies_job, IntervalTrigger(minutes=2), id="reply_checker", replace_existing=True)
     scheduler.add_job(send_followups_job, IntervalTrigger(hours=1), id="followup_sender", replace_existing=True)
     scheduler.start()
     print("Scheduler started")
 
+
 def stop_scheduler():
     scheduler.shutdown()
 
-def schedule_campaign(campaign_id: str, send_at: datetime = None):
-    if send_at and send_at > datetime.utcnow():
+
+def schedule_campaign(campaign_id: str, schedule_type: str, send_at: datetime = None, recurrence_days: int = None):
+    """
+    schedule_type='once'      → DateTrigger at send_at
+    schedule_type='recurring' → send immediately, then IntervalTrigger every recurrence_days days
+    """
+    import asyncio
+
+    if schedule_type == "recurring" and recurrence_days:
+        asyncio.create_task(process_campaign_sending(campaign_id, is_recurring=True))
+        scheduler.add_job(
+            process_campaign_sending,
+            IntervalTrigger(days=recurrence_days),
+            args=[campaign_id, True],
+            id=f"campaign_{campaign_id}",
+            replace_existing=True,
+        )
+        print(f"Recurring campaign {campaign_id} scheduled every {recurrence_days} day(s)")
+
+    elif schedule_type == "once" and send_at and send_at > datetime.utcnow():
         scheduler.add_job(
             process_campaign_sending,
             DateTrigger(run_date=send_at),
             args=[campaign_id],
             id=f"campaign_{campaign_id}",
-            replace_existing=True
+            replace_existing=True,
         )
+        print(f"One-time campaign {campaign_id} scheduled for {send_at}")
+
     else:
         import asyncio
         asyncio.create_task(process_campaign_sending(campaign_id))

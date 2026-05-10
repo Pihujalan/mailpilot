@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, delete
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from database import init_db, get_db, User, Campaign, EmailLog
 from auth import get_auth_url, exchange_code, get_user_info, credentials_to_dict
 from ai_generator import generate_email
-from scheduler import start_scheduler, stop_scheduler, schedule_campaign, process_campaign_sending
+from scheduler import start_scheduler, stop_scheduler, schedule_campaign, process_campaign_sending, scheduler, check_replies_job
 
 load_dotenv()
 
@@ -156,7 +156,7 @@ class CampaignCreate(BaseModel):
     email_body: str
     followup_subject: Optional[str] = None
     followup_body: Optional[str] = None
-    schedule_type: str = "now"  # now, once, recurring
+    schedule_type: str = "now"
     schedule_datetime: Optional[str] = None
     recurrence_days: Optional[int] = None
 
@@ -172,8 +172,10 @@ async def create_campaign(data: CampaignCreate, user_id: str = Query(...), db: A
     if data.schedule_datetime:
         try:
             send_dt = datetime.fromisoformat(data.schedule_datetime)
-        except:
+        except Exception:
             pass
+
+    initial_status = "sending" if data.schedule_type == "now" else "scheduled"
 
     campaign = Campaign(
         id=campaign_id,
@@ -191,17 +193,29 @@ async def create_campaign(data: CampaignCreate, user_id: str = Query(...), db: A
         schedule_type=data.schedule_type,
         schedule_datetime=send_dt,
         recurrence_days=data.recurrence_days,
-        status="scheduled" if data.schedule_type != "now" else "sending",
+        status=initial_status,
     )
     db.add(campaign)
     await db.commit()
 
-    # Trigger sending
+    import asyncio
+
     if data.schedule_type == "now":
-        import asyncio
         asyncio.create_task(process_campaign_sending(campaign_id))
-    elif send_dt:
-        schedule_campaign(campaign_id, send_dt)
+
+    elif data.schedule_type == "recurring":
+        schedule_campaign(
+            campaign_id,
+            schedule_type="recurring",
+            recurrence_days=data.recurrence_days or 1,
+        )
+
+    elif data.schedule_type == "once" and send_dt:
+        schedule_campaign(
+            campaign_id,
+            schedule_type="once",
+            send_at=send_dt,
+        )
 
     return {"id": campaign_id, "status": campaign.status}
 
@@ -211,13 +225,12 @@ async def list_campaigns(user_id: str = Query(...), db: AsyncSession = Depends(g
         select(Campaign).where(Campaign.user_id == user_id).order_by(Campaign.created_at.desc())
     )
     campaigns = result.scalars().all()
-    
+
     output = []
     for c in campaigns:
-        # Get stats
         logs_result = await db.execute(select(EmailLog).where(EmailLog.campaign_id == c.id))
         logs = logs_result.scalars().all()
-        
+
         output.append({
             "id": c.id,
             "name": c.name,
@@ -236,7 +249,7 @@ async def list_campaigns(user_id: str = Query(...), db: AsyncSession = Depends(g
                 "pending": sum(1 for l in logs if l.status == "pending"),
             }
         })
-    
+
     return output
 
 @app.get("/campaigns/{campaign_id}/logs")
@@ -260,14 +273,24 @@ async def get_campaign_logs(campaign_id: str, user_id: str = Query(...), db: Asy
         for l in logs
     ]
 
+# ─── ADMIN ────────────────────────────────────────────────────────────────────
+
+@app.post("/admin/check-replies")
+async def force_check_replies(user_id: str = Query(...)):
+    import asyncio
+    asyncio.create_task(check_replies_job())
+    return {"message": "Reply check triggered"}
+
+# ─── STATS ────────────────────────────────────────────────────────────────────
+
 @app.get("/stats")
 async def get_stats(user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
     campaigns_result = await db.execute(select(Campaign).where(Campaign.user_id == user_id))
     campaigns = campaigns_result.scalars().all()
-    
+
     logs_result = await db.execute(select(EmailLog).where(EmailLog.user_id == user_id))
     logs = logs_result.scalars().all()
-    
+
     return {
         "total_campaigns": len(campaigns),
         "total_sent": sum(1 for l in logs if l.status in ["sent", "followup_sent", "replied"]),
@@ -278,6 +301,8 @@ async def get_stats(user_id: str = Query(...), db: AsyncSession = Depends(get_db
         "active_campaigns": sum(1 for c in campaigns if c.status == "active"),
     }
 
+# ─── DELETE CAMPAIGN ──────────────────────────────────────────────────────────
+
 @app.delete("/campaigns/{campaign_id}")
 async def delete_campaign(campaign_id: str, user_id: str = Query(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -286,6 +311,15 @@ async def delete_campaign(campaign_id: str, user_id: str = Query(...), db: Async
     campaign = result.scalar_one_or_none()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Delete orphaned logs first
+    await db.execute(delete(EmailLog).where(EmailLog.campaign_id == campaign_id))
     await db.delete(campaign)
     await db.commit()
+
+    # Remove scheduled job if exists
+    job_id = f"campaign_{campaign_id}"
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+
     return {"success": True}

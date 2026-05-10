@@ -1,4 +1,5 @@
 import base64
+import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from googleapiclient.discovery import build
@@ -11,37 +12,33 @@ def build_gmail_service(cred_dict: dict):
     service = build("gmail", "v1", credentials=credentials)
     return service, credentials
 
-def create_message(sender: str, to: str, subject: str, body: str, thread_id: str = None):
+def create_message(sender, to, subject, body, thread_id=None):
     message = MIMEMultipart("alternative")
     message["to"] = to
     message["from"] = sender
     message["subject"] = subject
-    
-    # Plain text
     text_part = MIMEText(body, "plain")
-    
-    # HTML version
     html_body = body.replace("\n", "<br>")
-    html_part = MIMEText(f"""
-    <html><body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px;">
-        {html_body}
-    </body></html>
-    """, "html")
-    
+    html_part = MIMEText(f"""<html><body style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 600px;">{html_body}</body></html>""", "html")
     message.attach(text_part)
     message.attach(html_part)
-    
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     result = {"raw": raw}
     if thread_id:
         result["threadId"] = thread_id
     return result
 
-async def send_email(cred_dict: dict, sender_email: str, to: str, subject: str, body: str, thread_id: str = None):
+def _send_email_sync(cred_dict, sender_email, to, subject, body, thread_id=None):
+    service, updated_creds = build_gmail_service(cred_dict)
+    message = create_message(sender_email, to, subject, body, thread_id)
+    sent = service.users().messages().send(userId="me", body=message).execute()
+    return sent, updated_creds
+
+async def send_email(cred_dict, sender_email, to, subject, body, thread_id=None):
     try:
-        service, updated_creds = build_gmail_service(cred_dict)
-        message = create_message(sender_email, to, subject, body, thread_id)
-        sent = service.users().messages().send(userId="me", body=message).execute()
+        sent, updated_creds = await asyncio.to_thread(
+            _send_email_sync, cred_dict, sender_email, to, subject, body, thread_id
+        )
         return {
             "success": True,
             "message_id": sent.get("id"),
@@ -58,18 +55,26 @@ async def send_email(cred_dict: dict, sender_email: str, to: str, subject: str, 
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-async def check_for_reply(cred_dict: dict, thread_id: str, original_message_id: str) -> bool:
-    try:
-        service, _ = build_gmail_service(cred_dict)
-        thread = service.users().threads().get(userId="me", id=thread_id).execute()
-        messages = thread.get("messages", [])
-        # If more than 1 message in thread, someone replied
-        if len(messages) > 1:
-            for msg in messages:
-                if msg["id"] != original_message_id:
-                    # Check it's not from us (check headers)
-                    headers = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
-                    return True
+def _check_reply_sync(cred_dict, thread_id, original_message_id, my_email):
+    service, _ = build_gmail_service(cred_dict)
+    thread = service.users().threads().get(userId="me", id=thread_id).execute()
+    messages = thread.get("messages", [])
+    if len(messages) > 1:
+        for msg in messages:
+            if msg["id"] == original_message_id:
+                continue
+            headers = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
+            from_header = headers.get("From", "")
+            if my_email.lower() not in from_header.lower():
+                return True
+    return False
+
+async def check_for_reply(cred_dict, thread_id, original_message_id, my_email):
+    if not thread_id or not original_message_id:
         return False
+    try:
+        return await asyncio.to_thread(
+            _check_reply_sync, cred_dict, thread_id, original_message_id, my_email
+        )
     except Exception:
         return False

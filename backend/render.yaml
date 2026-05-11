@@ -10,8 +10,8 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
     healthCheckPath: /health
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -47,7 +47,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A celery_worker worker --loglevel=info
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -71,7 +71,7 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: celery -A celery_worker beat --loglevel=info
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:

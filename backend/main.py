@@ -118,7 +118,7 @@ async def auth_callback(code: str = Query(...), db: AsyncSession = Depends(get_d
         _auth_code_store[one_time_code] = token
 
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        return RedirectResponse(f"{frontend_url}/dashboard?code={one_time_code}")
+        return RedirectResponse(f"{frontend_url}?code={one_time_code}")
 
     except Exception as e:
         logger.error("OAuth callback error", exc_info=True)

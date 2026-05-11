@@ -2,6 +2,9 @@ import React, { useState } from 'react'
 import { Check, Eye, EyeOff, ExternalLink } from 'lucide-react'
 
 const API = 'http://localhost:8000'
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
+})
 
 const PROVIDERS = [
   {
@@ -38,9 +41,12 @@ export default function Settings({ user, login }) {
     if (!apiKey.trim()) { setError('Enter your API key'); return }
     setSaving(true); setError('')
     try {
-      const res = await fetch(`${API}/settings?user_id=${user.id}`, {
+      const res = await fetch(`${API}/settings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...authHeaders()
+        },
         body: JSON.stringify({ ai_provider: provider, ai_api_key: apiKey })
       })
       if (!res.ok) throw new Error('Failed to save')

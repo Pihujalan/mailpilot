@@ -5,6 +5,11 @@ import { formatDistanceToNow } from 'date-fns'
 
 const API = 'http://localhost:8000'
 
+// Helper — always reads the latest token from localStorage
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
+})
+
 function StatCard({ icon: Icon, label, value, color, sub }) {
   return (
     <div className="card" style={{ padding: 24, display: 'flex', alignItems: 'flex-start', gap: 16 }}>
@@ -25,11 +30,11 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 }
 
 const STATUS_CONFIG = {
-  draft:         { color: 'var(--muted)',  label: 'Draft',          icon: AlertCircle },
-  scheduled:     { color: '#f59e0b',       label: 'Scheduled',      icon: Clock },
-  sending:       { color: 'var(--accent)', label: 'Sending',        icon: RefreshCw },
-  active:        { color: 'var(--green)',  label: 'Active',         icon: CheckCircle },
-  completed:     { color: 'var(--muted)',  label: 'Completed',      icon: CheckCircle },
+  draft:     { color: 'var(--muted)',  label: 'Draft',     icon: AlertCircle },
+  scheduled: { color: '#f59e0b',       label: 'Scheduled', icon: Clock },
+  sending:   { color: 'var(--accent)', label: 'Sending',   icon: RefreshCw },
+  active:    { color: 'var(--green)',  label: 'Active',    icon: CheckCircle },
+  completed: { color: 'var(--muted)',  label: 'Completed', icon: CheckCircle },
 }
 
 export default function Dashboard({ user }) {
@@ -48,9 +53,18 @@ export default function Dashboard({ user }) {
   const fetchData = async () => {
     try {
       const [camRes, statRes] = await Promise.all([
-        fetch(`${API}/campaigns?user_id=${user.id}`),
-        fetch(`${API}/stats?user_id=${user.id}`)
+        fetch(`${API}/campaigns`, { headers: authHeaders() }),
+        fetch(`${API}/stats`,     { headers: authHeaders() }),
       ])
+
+      // Token expired or invalid — log out
+      if (camRes.status === 401 || statRes.status === 401) {
+        localStorage.removeItem('mailpilot_user')
+        localStorage.removeItem('mailpilot_token')
+        navigate('/')
+        return
+      }
+
       setCampaigns(await camRes.json())
       setStats(await statRes.json())
     } catch (e) {
@@ -78,7 +92,7 @@ export default function Dashboard({ user }) {
         </button>
       </div>
 
-      {/* Stats */}
+      {/* API key warning */}
       {!user.has_api_key && (
         <div style={{
           padding: '14px 20px', borderRadius: 12, marginBottom: 24,
@@ -95,11 +109,12 @@ export default function Dashboard({ user }) {
         </div>
       )}
 
+      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <StatCard icon={Zap} label="Total Campaigns" value={stats?.total_campaigns ?? '—'} color="var(--accent)" />
-        <StatCard icon={Send} label="Emails Sent" value={stats?.total_sent ?? '—'} color="#60a5fa" />
-        <StatCard icon={MessageSquare} label="Replies Received" value={stats?.total_replied ?? '—'} color="var(--green)" />
-        <StatCard icon={TrendingUp} label="Reply Rate" value={stats ? `${stats.reply_rate}%` : '—'} color="var(--accent2)"
+        <StatCard icon={Zap}           label="Total Campaigns"   value={stats?.total_campaigns ?? '—'} color="var(--accent)" />
+        <StatCard icon={Send}          label="Emails Sent"        value={stats?.total_sent ?? '—'}       color="#60a5fa" />
+        <StatCard icon={MessageSquare} label="Replies Received"   value={stats?.total_replied ?? '—'}    color="var(--green)" />
+        <StatCard icon={TrendingUp}    label="Reply Rate"         value={stats ? `${stats.reply_rate}%` : '—'} color="var(--accent2)"
           sub={stats?.active_campaigns ? `${stats.active_campaigns} active` : null} />
       </div>
 
@@ -163,7 +178,9 @@ export default function Dashboard({ user }) {
                   </div>
 
                   <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    {formatDistanceToNow(new Date(c.created_at + 'Z'), { addSuffix: true })}
+                    {c.created_at && !isNaN(new Date(c.created_at).getTime())
+                      ? formatDistanceToNow(new Date(c.created_at), { addSuffix: true })
+                      : '—'}
                   </div>
 
                   <ChevronRight size={16} color="var(--muted)" />

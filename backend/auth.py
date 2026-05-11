@@ -2,10 +2,55 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from jose import JWTError, jwt
+from datetime import datetime, timezone, timedelta
+from fastapi import HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import logging
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# ─── JWT ──────────────────────────────────────────────────────────────────────
+
+JWT_SECRET = os.getenv("JWT_SECRET")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 30
+
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set")
+
+security = HTTPBearer()
+
+
+def create_jwt(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_jwt(token: str) -> str:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_id
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    return verify_jwt(credentials.credentials)
+
+
+# ─── Google OAuth ─────────────────────────────────────────────────────────────
 
 SCOPES = [
     "openid",
@@ -25,33 +70,35 @@ CLIENT_CONFIG = {
     }
 }
 
+
 def create_flow():
-    flow = Flow.from_client_config(
+    return Flow.from_client_config(
         CLIENT_CONFIG,
         scopes=SCOPES,
-        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI")
+        redirect_uri=os.getenv("GOOGLE_REDIRECT_URI"),
     )
-    return flow
+
 
 def get_auth_url():
     flow = create_flow()
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        prompt="consent"
+        prompt="consent",
     )
     return auth_url, state
+
 
 def exchange_code(code: str):
     flow = create_flow()
     flow.fetch_token(code=code)
-    credentials = flow.credentials
-    return credentials
+    return flow.credentials
+
 
 def get_user_info(credentials: Credentials):
     service = build("oauth2", "v2", credentials=credentials)
-    user_info = service.userinfo().get().execute()
-    return user_info
+    return service.userinfo().get().execute()
+
 
 def credentials_to_dict(credentials: Credentials):
     return {
@@ -63,6 +110,7 @@ def credentials_to_dict(credentials: Credentials):
         "scopes": credentials.scopes,
     }
 
+
 def dict_to_credentials(cred_dict: dict):
     return Credentials(
         token=cred_dict["token"],
@@ -72,6 +120,7 @@ def dict_to_credentials(cred_dict: dict):
         client_secret=cred_dict["client_secret"],
         scopes=cred_dict.get("scopes"),
     )
+
 
 def refresh_credentials_if_needed(credentials: Credentials):
     if credentials.expired and credentials.refresh_token:

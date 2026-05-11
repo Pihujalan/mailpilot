@@ -1,6 +1,9 @@
 import httpx
 import json
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an expert cold email copywriter. You write personalized, concise, and compelling cold emails that get replies.
 Your emails are:
@@ -36,6 +39,16 @@ Respond ONLY with this JSON structure:
   "personalization_reason": "one sentence explaining why this email is personalized to this company"
 }}"""
 
+
+def _parse_json_response(content: str) -> dict:
+    """Strip markdown fences and parse JSON. Raises ValueError on failure."""
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("```", 2)[-1] if cleaned.count("```") >= 2 else cleaned
+        cleaned = cleaned.lstrip("json").strip().rstrip("```").strip()
+    return json.loads(cleaned)
+
+
 async def generate_with_openai(api_key: str, prompt: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
@@ -54,7 +67,8 @@ async def generate_with_openai(api_key: str, prompt: str) -> dict:
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
-        return json.loads(content)
+        return _parse_json_response(content)
+
 
 async def generate_with_claude(api_key: str, prompt: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
@@ -75,7 +89,8 @@ async def generate_with_claude(api_key: str, prompt: str) -> dict:
         response.raise_for_status()
         data = response.json()
         content = data["content"][0]["text"]
-        return json.loads(content)
+        return _parse_json_response(content)
+
 
 async def generate_with_gemini(api_key: str, prompt: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
@@ -90,8 +105,8 @@ async def generate_with_gemini(api_key: str, prompt: str) -> dict:
         response.raise_for_status()
         data = response.json()
         content = data["candidates"][0]["content"]["parts"][0]["text"]
-        content = content.strip().lstrip("```json").rstrip("```").strip()
-        return json.loads(content)
+        return _parse_json_response(content)
+
 
 async def generate_with_groq(api_key: str, prompt: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
@@ -111,8 +126,8 @@ async def generate_with_groq(api_key: str, prompt: str) -> dict:
         response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
-        content = content.strip().lstrip("```json").rstrip("```").strip()
-        return json.loads(content)
+        return _parse_json_response(content)
+
 
 async def generate_email(
     provider: str,
@@ -123,16 +138,24 @@ async def generate_email(
     tone: str
 ) -> dict:
     prompt = build_prompt(company_name, target_role, offer, tone)
-    
+
     generators = {
         "openai": generate_with_openai,
         "claude": generate_with_claude,
         "gemini": generate_with_gemini,
         "groq": generate_with_groq,
     }
-    
+
     generator = generators.get(provider)
     if not generator:
         raise ValueError(f"Unknown provider: {provider}")
-    
-    return await generator(api_key, prompt)
+
+    try:
+        return await generator(api_key, prompt)
+    except httpx.HTTPStatusError as e:
+        # Log the real error (includes status code and provider) but don't surface it
+        logger.error("Provider %s returned HTTP %s", provider, e.response.status_code)
+        raise RuntimeError("AI provider returned an error. Check your API key.")
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error("Failed to parse response from provider %s: %s", provider, e)
+        raise RuntimeError("AI provider returned an unexpected response format.")

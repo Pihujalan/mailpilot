@@ -5,12 +5,16 @@ import { formatDistanceToNow, format } from 'date-fns'
 
 const API = 'http://localhost:8000'
 
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
+})
+
 const STATUS = {
-  pending: { color: 'var(--muted)', icon: Clock, label: 'Pending' },
-  sent: { color: '#60a5fa', icon: Mail, label: 'Sent' },
-  followup_sent: { color: 'var(--accent)', icon: RefreshCw, label: 'Follow-up Sent' },
-  replied: { color: 'var(--green)', icon: MessageSquare, label: 'Replied' },
-  failed: { color: 'var(--accent2)', icon: XCircle, label: 'Failed' },
+  pending:      { color: 'var(--muted)',  icon: Clock,         label: 'Pending' },
+  sent:         { color: '#60a5fa',       icon: Mail,          label: 'Sent' },
+  followup_sent:{ color: 'var(--accent)', icon: RefreshCw,     label: 'Follow-up Sent' },
+  replied:      { color: 'var(--green)',  icon: MessageSquare, label: 'Replied' },
+  failed:       { color: 'var(--accent2)',icon: XCircle,       label: 'Failed' },
 }
 
 export default function CampaignDetail({ user }) {
@@ -32,24 +36,35 @@ export default function CampaignDetail({ user }) {
   const fetchData = async () => {
     try {
       const [camRes, logsRes] = await Promise.all([
-        fetch(`${API}/campaigns?user_id=${user.id}`),
-        fetch(`${API}/campaigns/${id}/logs?user_id=${user.id}`)
+        fetch(`${API}/campaigns`,            { headers: authHeaders() }),
+        fetch(`${API}/campaigns/${id}/logs`, { headers: authHeaders() }),
       ])
+
+      if (camRes.status === 401 || logsRes.status === 401) {
+        localStorage.removeItem('mailpilot_user')
+        localStorage.removeItem('mailpilot_token')
+        navigate('/')
+        return
+      }
+
       const campaigns = await camRes.json()
       setCampaign(campaigns.find(c => c.id === id))
       setLogs(await logsRes.json())
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      return
-    }
+    if (!confirmDelete) { setConfirmDelete(true); return }
     setDeleting(true)
     try {
-      await fetch(`${API}/campaigns/${id}?user_id=${user.id}`, { method: 'DELETE' })
+      await fetch(`${API}/campaigns/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
       navigate('/dashboard')
     } catch (e) {
       console.error(e)
@@ -105,7 +120,11 @@ export default function CampaignDetail({ user }) {
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{campaign.name}</h1>
         <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 4 }}>
-          {campaign.company_name} · {campaign.target_role} · Created {formatDistanceToNow(new Date(campaign.created_at + 'Z'), { addSuffix: true })}
+          {campaign.company_name} · {campaign.target_role} · Created {
+            campaign.created_at && !isNaN(new Date(campaign.created_at + 'Z').getTime())
+              ? formatDistanceToNow(new Date(campaign.created_at + 'Z'), { addSuffix: true })
+              : '—'
+          }
         </p>
       </div>
 
@@ -113,8 +132,8 @@ export default function CampaignDetail({ user }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
         {[
           { label: 'Recipients', value: campaign.recipient_count, color: 'var(--muted)' },
-          { label: 'Sent', value: sent, color: '#60a5fa' },
-          { label: 'Replied', value: replied, color: 'var(--green)' },
+          { label: 'Sent',       value: sent,                     color: '#60a5fa' },
+          { label: 'Replied',    value: replied,                  color: 'var(--green)' },
           { label: 'Reply Rate', value: sent ? `${Math.round(replied / sent * 100)}%` : '—', color: 'var(--accent)' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '16px 20px', textAlign: 'center' }}>
@@ -166,16 +185,31 @@ export default function CampaignDetail({ user }) {
                     {cfg.label}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {log.sent_at ? format(new Date(log.sent_at + 'Z'), 'MMM d, h:mm a') : '—'}
+                    {
+                      log.sent_at &&
+                      !isNaN(new Date(log.sent_at + 'Z').getTime())
+                        ? format(new Date(log.sent_at + 'Z'), 'MMM d, h:mm a')
+                        : '—'
+                    }
                   </div>
                   {log.next_followup_at && !log.followup_sent && log.status !== 'replied' && (
                     <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2 }}>
-                      Follow-up: {formatDistanceToNow(new Date(log.next_followup_at + 'Z'), { addSuffix: true })}
+                      Follow-up: {
+                        log.next_followup_at &&
+                          !isNaN(new Date(log.next_followup_at + 'Z').getTime())
+                          ? formatDistanceToNow(new Date(log.next_followup_at + 'Z'), { addSuffix: true })
+                          : '—'
+                      }
                     </div>
                   )}
                   {log.replied_at && (
                     <div style={{ fontSize: 10, color: 'var(--green)', marginTop: 2 }}>
-                      Replied {formatDistanceToNow(new Date(log.replied_at + 'Z'), { addSuffix: true })}
+                      Replied {
+                        log.replied_at &&
+                        !isNaN(new Date(log.replied_at + 'Z').getTime())
+                          ? formatDistanceToNow(new Date(log.replied_at + 'Z'), { addSuffix: true })
+                          : '—'
+                      }
                     </div>
                   )}
                 </div>

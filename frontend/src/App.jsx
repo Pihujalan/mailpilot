@@ -13,13 +13,15 @@ export default function App() {
     return saved ? JSON.parse(saved) : null
   })
 
-  const login = (userData) => {
+  const login = (userData, token) => {
     localStorage.setItem('mailpilot_user', JSON.stringify(userData))
+    localStorage.setItem('mailpilot_token', token)
     setUser(userData)
   }
 
   const logout = () => {
     localStorage.removeItem('mailpilot_user')
+    localStorage.removeItem('mailpilot_token')
     setUser(null)
   }
 
@@ -52,25 +54,44 @@ export default function App() {
   )
 }
 
-// Handles OAuth callback — reads user_id from URL, fetches user info
+// Exchanges ?code= one-time code for a JWT, then fetches user info
 function AuthCallback({ login, children }) {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    const userId = searchParams.get('user_id')
-    if (userId) {
-      fetch(`http://localhost:8000/auth/me?user_id=${userId}`)
+    const code = searchParams.get('code')
+    const existingToken = localStorage.getItem('mailpilot_token')
+
+    if (code) {
+      // Exchange the one-time code for a real JWT
+      fetch(`http://localhost:8000/auth/token?code=${code}`, {
+        method: 'POST',
+      })
         .then(r => r.json())
-        .then(user => {
-          login(user)
-          setDone(true)
-          navigate('/dashboard', { replace: true })
+        .then(({ access_token }) => {
+          if (!access_token) throw new Error('No token')
+          return fetch('http://localhost:8000/auth/me', {
+            headers: { Authorization: `Bearer ${access_token}` },
+          })
+            .then(r => r.json())
+            .then(user => {
+              login(user, access_token)
+              setDone(true)
+              navigate('/dashboard', { replace: true })
+            })
         })
-        .catch(() => setDone(true))
-    } else {
+        .catch(() => {
+          setDone(true)
+          navigate('/', { replace: true })
+        })
+    } else if (existingToken) {
+      // Already logged in — just show the dashboard
       setDone(true)
+    } else {
+      // No code, no token — back to landing
+      navigate('/', { replace: true })
     }
   }, [])
 

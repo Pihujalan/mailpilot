@@ -4,6 +4,10 @@ import { Sparkles, ChevronRight, ChevronLeft, Send, Clock, Calendar, RefreshCw, 
 
 const API = 'http://localhost:8000'
 
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
+})
+
 const TONES = [
   { value: 'professional', label: 'Professional', desc: 'Formal & polished' },
   { value: 'friendly',     label: 'Friendly',     desc: 'Warm & approachable' },
@@ -12,16 +16,15 @@ const TONES = [
 ]
 
 const SCHEDULE_OPTIONS = [
-  { value: 'now',       label: 'Send Now',        icon: Send,      desc: 'Sends immediately' },
-  { value: 'once',      label: 'Schedule Once',   icon: Calendar,  desc: 'Pick a date & time' },
-  { value: 'recurring', label: 'Recurring',       icon: RefreshCw, desc: 'Send every X days' },
+  { value: 'now',       label: 'Send Now',      icon: Send,      desc: 'Sends immediately' },
+  { value: 'once',      label: 'Schedule Once', icon: Calendar,  desc: 'Pick a date & time' },
+  { value: 'recurring', label: 'Recurring',     icon: RefreshCw, desc: 'Send every X days' },
 ]
 
 export default function NewCampaign({ user }) {
   const navigate = useNavigate()
-  const [step, setStep] = useState(1) // 1=details, 2=generate, 3=schedule
+  const [step, setStep] = useState(1)
 
-  // Form state
   const [name, setName] = useState('')
   const [recipients, setRecipients] = useState([''])
   const [company, setCompany] = useState('')
@@ -29,18 +32,15 @@ export default function NewCampaign({ user }) {
   const [offer, setOffer] = useState('')
   const [tone, setTone] = useState('professional')
 
-  // Generated content
   const [generated, setGenerated] = useState(null)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
 
-  // Editing generated content
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [followupSubject, setFollowupSubject] = useState('')
   const [followupBody, setFollowupBody] = useState('')
 
-  // Schedule
   const [scheduleType, setScheduleType] = useState('now')
   const [scheduleDate, setScheduleDate] = useState('')
   const [recurrenceDays, setRecurrenceDays] = useState(3)
@@ -55,11 +55,12 @@ export default function NewCampaign({ user }) {
   const handleGenerate = async () => {
     setGenerating(true); setGenError('')
     try {
-      const res = await fetch(`${API}/generate?user_id=${user.id}`, {
+      const res = await fetch(`${API}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ company_name: company, target_role: role, offer, tone })
       })
+      if (res.status === 401) { navigate('/'); return }
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail) }
       const data = await res.json()
       setGenerated(data)
@@ -80,9 +81,9 @@ export default function NewCampaign({ user }) {
       const validRecipients = recipients.filter(r => r.trim() && r.includes('@'))
       if (!validRecipients.length) throw new Error('Add at least one valid recipient email')
 
-      const res = await fetch(`${API}/campaigns?user_id=${user.id}`, {
+      const res = await fetch(`${API}/campaigns`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           name: name || `Campaign for ${company}`,
           recipient_emails: validRecipients,
@@ -99,6 +100,7 @@ export default function NewCampaign({ user }) {
           recurrence_days: scheduleType === 'recurring' ? recurrenceDays : null,
         })
       })
+      if (res.status === 401) { navigate('/'); return }
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail) }
       navigate('/dashboard')
     } catch (e) {
@@ -113,12 +115,9 @@ export default function NewCampaign({ user }) {
 
   return (
     <div className="fade-in" style={{ maxWidth: 720, margin: '0 auto' }}>
-      {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>New Campaign</h1>
-        <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 4 }}>
-          AI-powered cold outreach in 3 steps
-        </p>
+        <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 4 }}>AI-powered cold outreach in 3 steps</p>
       </div>
 
       {/* Step indicator */}
@@ -147,34 +146,29 @@ export default function NewCampaign({ user }) {
         })}
       </div>
 
-      {/* Step 1: Details */}
+      {/* Step 1 */}
       {step === 1 && (
         <div className="card fade-in" style={{ padding: 28 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 24 }}>Campaign Details</h2>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
               <label>Campaign Name (optional)</label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Q1 SaaS Outreach" />
             </div>
-
             <div>
               <label>Company / Target Company</label>
               <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Stripe, small fintech startups" />
             </div>
-
             <div>
               <label>Target Role</label>
               <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Head of Marketing, CTO" />
             </div>
-
             <div>
               <label>Your Offer / Service</label>
               <textarea value={offer} onChange={e => setOffer(e.target.value)}
                 placeholder="e.g. I build AI automation tools that reduce customer support tickets by 60%"
                 rows={3} style={{ resize: 'vertical' }} />
             </div>
-
             <div>
               <label>Tone</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -191,7 +185,6 @@ export default function NewCampaign({ user }) {
                 ))}
               </div>
             </div>
-
             <div>
               <label>Recipient Emails</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -215,7 +208,6 @@ export default function NewCampaign({ user }) {
               </div>
             </div>
           </div>
-
           <div style={{ marginTop: 28, display: 'flex', justifyContent: 'flex-end' }}>
             <button className="btn-primary" onClick={() => setStep(2)} disabled={!canProceed1}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -225,14 +217,16 @@ export default function NewCampaign({ user }) {
         </div>
       )}
 
-      {/* Step 2: Generate emails */}
+      {/* Step 2 */}
       {step === 2 && (
         <div className="card fade-in" style={{ padding: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Email Content</h2>
             <button className="btn-primary" onClick={handleGenerate} disabled={generating}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', fontSize: 13 }}>
-              {generating ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Generating...</> : <><Sparkles size={14} /> {generated ? 'Regenerate' : 'Generate with AI'}</>}
+              {generating
+                ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Generating...</>
+                : <><Sparkles size={14} /> {generated ? 'Regenerate' : 'Generate with AI'}</>}
             </button>
           </div>
 
@@ -285,7 +279,7 @@ export default function NewCampaign({ user }) {
         </div>
       )}
 
-      {/* Step 3: Schedule */}
+      {/* Step 3 */}
       {step === 3 && (
         <div className="card fade-in" style={{ padding: 28 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 24 }}>Schedule</h2>
@@ -306,7 +300,7 @@ export default function NewCampaign({ user }) {
                   <Icon size={18} color={scheduleType === value ? 'var(--accent)' : 'var(--muted)'} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: scheduleType === value ? 'var(--text)' : 'var(--text)' }}>{label}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{desc}</div>
                 </div>
                 {scheduleType === value && <Check size={16} color="var(--accent)" style={{ marginLeft: 'auto' }} />}
@@ -350,30 +344,20 @@ export default function NewCampaign({ user }) {
             </div>
           )}
 
-          {/* Summary */}
           <div style={{ padding: '16px 20px', borderRadius: 12, background: 'var(--surface2)', border: '1px solid var(--border)', marginBottom: 24 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--muted)' }}>CAMPAIGN SUMMARY</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--muted)' }}>Campaign</span>
-                <span style={{ fontWeight: 600 }}>{name || `${company} outreach`}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--muted)' }}>Recipients</span>
-                <span style={{ fontWeight: 600 }}>{recipients.filter(r => r.includes('@')).length}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--muted)' }}>Follow-up</span>
-                <span style={{ fontWeight: 600, color: followupBody ? 'var(--green)' : 'var(--muted)' }}>
-                  {followupBody ? 'Yes — in 3 days if no reply' : 'None'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--muted)' }}>Schedule</span>
-                <span style={{ fontWeight: 600 }}>
-                  {scheduleType === 'now' ? 'Immediate' : scheduleType === 'once' ? `Once at ${scheduleDate}` : `Every ${recurrenceDays} days`}
-                </span>
-              </div>
+              {[
+                { label: 'Campaign',   value: name || `${company} outreach` },
+                { label: 'Recipients', value: recipients.filter(r => r.includes('@')).length },
+                { label: 'Follow-up',  value: followupBody ? 'Yes — in 3 days if no reply' : 'None', color: followupBody ? 'var(--green)' : 'var(--muted)' },
+                { label: 'Schedule',   value: scheduleType === 'now' ? 'Immediate' : scheduleType === 'once' ? `Once at ${scheduleDate}` : `Every ${recurrenceDays} days` },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted)' }}>{s.label}</span>
+                  <span style={{ fontWeight: 600, color: s.color || 'var(--text)' }}>{s.value}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -383,7 +367,9 @@ export default function NewCampaign({ user }) {
             </button>
             <button className="btn-primary" onClick={handleSubmit} disabled={submitting}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {submitting ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Launching...</> : <><Send size={14} /> Launch Campaign</>}
+              {submitting
+                ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Launching...</>
+                : <><Send size={14} /> Launch Campaign</>}
             </button>
           </div>
         </div>

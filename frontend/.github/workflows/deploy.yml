@@ -1,0 +1,50 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: test-secret-at-least-32-characters-long-ok
+      FERNET_KEY: ${{ secrets.FERNET_KEY }}
+      GOOGLE_CLIENT_ID: test
+      GOOGLE_CLIENT_SECRET: test
+      GOOGLE_REDIRECT_URI: http://localhost:8000/auth/callback
+      FRONTEND_URL: http://localhost:5173
+      ALLOWED_ORIGINS: http://localhost:5173
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+
+      - name: Run tests
+        run: |
+          if [ -d "tests" ]; then pytest tests/ -v --tb=short; else echo "No tests yet — skipping"; fi
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys \
+            -d '{}'

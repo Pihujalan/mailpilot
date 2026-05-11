@@ -9,7 +9,7 @@ services:
     name: mailpilot-api
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./backend/Dockerfile
     healthCheckPath: /health
 
     envVars:
@@ -46,7 +46,7 @@ services:
     name: mailpilot-worker
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./backend/Dockerfile
 
     envVars:
       - key: DATABASE_URL
@@ -70,7 +70,7 @@ services:
     name: mailpilot-beat
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./backend/Dockerfile
 
     envVars:
       - key: DATABASE_URL

@@ -6,7 +6,9 @@ import NewCampaign from './pages/NewCampaign'
 import Settings from './pages/Settings'
 import CampaignDetail from './pages/CampaignDetail'
 import Layout from './components/Layout'
+
 const API = import.meta.env.VITE_API_URL
+
 export default function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('mailpilot_user')
@@ -54,44 +56,59 @@ export default function App() {
   )
 }
 
-// Exchanges ?code= one-time code for a JWT, then fetches user info
+// Flow:
+// 1. User clicks Sign in → /auth/login on backend
+// 2. Google redirects to backend /auth/callback?code=
+// 3. Backend exchanges code, issues JWT, redirects to frontend /dashboard?token=JWT
+// 4. This component reads ?token=, calls /auth/me, saves user+token, navigates cleanly
 function AuthCallback({ login, children }) {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    const code = searchParams.get('code')
+    const token = searchParams.get('token')
     const existingToken = localStorage.getItem('mailpilot_token')
 
-    if (code) {
-      // Exchange the one-time code for a real JWT
-      fetch(`${API}/auth/token?code=${code}`, {
-        method: 'POST',
+    if (token) {
+      // Fresh OAuth login — backend gave us JWT in URL
+      fetch(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-        .then(r => r.json())
-        .then(({ access_token }) => {
-          if (!access_token) throw new Error('No token')
-          return fetch(`${API}/auth/me`, {
-            headers: { Authorization: `Bearer ${access_token}` },
-          })
-            .then(r => r.json())
-            .then(user => {
-              login(user, access_token)
-              setDone(true)
-              window.history.replaceState({}, document.title, "/dashboard")
-            })
+        .then(r => {
+          if (!r.ok) throw new Error('Auth failed')
+          return r.json()
+        })
+        .then(userData => {
+          login(userData, token)
+          setDone(true)
+          navigate('/dashboard', { replace: true })
         })
         .catch(() => {
-          setDone(true)
-          window.location.href = "/"
+          localStorage.removeItem('mailpilot_user')
+          localStorage.removeItem('mailpilot_token')
+          window.location.href = '/'
         })
     } else if (existingToken) {
-      // Already logged in — just show the dashboard
-      setDone(true)
+      // Already logged in — re-validate token
+      fetch(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${existingToken}` },
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Token expired')
+          return r.json()
+        })
+        .then(userData => {
+          login(userData, existingToken)
+          setDone(true)
+        })
+        .catch(() => {
+          localStorage.removeItem('mailpilot_user')
+          localStorage.removeItem('mailpilot_token')
+          window.location.href = '/'
+        })
     } else {
-      // No code, no token — back to landing
-      window.location.href = "/"
+      window.location.href = '/'
     }
   }, [])
 

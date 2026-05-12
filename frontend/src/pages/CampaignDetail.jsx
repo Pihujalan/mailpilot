@@ -3,18 +3,18 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Mail, MessageSquare, Clock, CheckCircle, XCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL
 
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
 })
 
 const STATUS = {
-  pending:      { color: 'var(--muted)',  icon: Clock,         label: 'Pending' },
-  sent:         { color: '#60a5fa',       icon: Mail,          label: 'Sent' },
-  followup_sent:{ color: 'var(--accent)', icon: RefreshCw,     label: 'Follow-up Sent' },
-  replied:      { color: 'var(--green)',  icon: MessageSquare, label: 'Replied' },
-  failed:       { color: 'var(--accent2)',icon: XCircle,       label: 'Failed' },
+  pending: { color: 'var(--muted)', icon: Clock, label: 'Pending' },
+  sent: { color: '#60a5fa', icon: Mail, label: 'Sent' },
+  followup_sent: { color: 'var(--accent)', icon: RefreshCw, label: 'Follow-up Sent' },
+  replied: { color: 'var(--green)', icon: MessageSquare, label: 'Replied' },
+  failed: { color: 'var(--accent2)', icon: XCircle, label: 'Failed' },
 }
 
 export default function CampaignDetail({ user }) {
@@ -36,7 +36,7 @@ export default function CampaignDetail({ user }) {
   const fetchData = async () => {
     try {
       const [camRes, logsRes] = await Promise.all([
-        fetch(`${API}/campaigns`,            { headers: authHeaders() }),
+        fetch(`${API}/campaigns`, { headers: authHeaders() }),
         fetch(`${API}/campaigns/${id}/logs`, { headers: authHeaders() }),
       ])
 
@@ -132,8 +132,8 @@ export default function CampaignDetail({ user }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
         {[
           { label: 'Recipients', value: campaign.recipient_count, color: 'var(--muted)' },
-          { label: 'Sent',       value: sent,                     color: '#60a5fa' },
-          { label: 'Replied',    value: replied,                  color: 'var(--green)' },
+          { label: 'Sent', value: sent, color: '#60a5fa' },
+          { label: 'Replied', value: replied, color: 'var(--green)' },
           { label: 'Reply Rate', value: sent ? `${Math.round(replied / sent * 100)}%` : '—', color: 'var(--accent)' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '16px 20px', textAlign: 'center' }}>
@@ -187,7 +187,7 @@ export default function CampaignDetail({ user }) {
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                     {
                       log.sent_at &&
-                      !isNaN(new Date(log.sent_at + 'Z').getTime())
+                        !isNaN(new Date(log.sent_at + 'Z').getTime())
                         ? format(new Date(log.sent_at + 'Z'), 'MMM d, h:mm a')
                         : '—'
                     }
@@ -206,7 +206,7 @@ export default function CampaignDetail({ user }) {
                     <div style={{ fontSize: 10, color: 'var(--green)', marginTop: 2 }}>
                       Replied {
                         log.replied_at &&
-                        !isNaN(new Date(log.replied_at + 'Z').getTime())
+                          !isNaN(new Date(log.replied_at + 'Z').getTime())
                           ? formatDistanceToNow(new Date(log.replied_at + 'Z'), { addSuffix: true })
                           : '—'
                       }

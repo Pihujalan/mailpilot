@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sparkles, ChevronRight, ChevronLeft, Send, Clock, Calendar, RefreshCw, Plus, X, Check } from 'lucide-react'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL
 
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
@@ -10,15 +10,15 @@ const authHeaders = () => ({
 
 const TONES = [
   { value: 'professional', label: 'Professional', desc: 'Formal & polished' },
-  { value: 'friendly',     label: 'Friendly',     desc: 'Warm & approachable' },
-  { value: 'direct',       label: 'Direct',       desc: 'No fluff, straight to point' },
-  { value: 'confident',    label: 'Confident',    desc: 'Bold & assertive' },
+  { value: 'friendly', label: 'Friendly', desc: 'Warm & approachable' },
+  { value: 'direct', label: 'Direct', desc: 'No fluff, straight to point' },
+  { value: 'confident', label: 'Confident', desc: 'Bold & assertive' },
 ]
 
 const SCHEDULE_OPTIONS = [
-  { value: 'now',       label: 'Send Now',      icon: Send,      desc: 'Sends immediately' },
-  { value: 'once',      label: 'Schedule Once', icon: Calendar,  desc: 'Pick a date & time' },
-  { value: 'recurring', label: 'Recurring',     icon: RefreshCw, desc: 'Send every X days' },
+  { value: 'now', label: 'Send Now', icon: Send, desc: 'Sends immediately' },
+  { value: 'once', label: 'Schedule Once', icon: Calendar, desc: 'Pick a date & time' },
+  { value: 'recurring', label: 'Recurring', icon: RefreshCw, desc: 'Send every X days' },
 ]
 
 export default function NewCampaign({ user }) {
@@ -348,10 +348,10 @@ export default function NewCampaign({ user }) {
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--muted)' }}>CAMPAIGN SUMMARY</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
               {[
-                { label: 'Campaign',   value: name || `${company} outreach` },
+                { label: 'Campaign', value: name || `${company} outreach` },
                 { label: 'Recipients', value: recipients.filter(r => r.includes('@')).length },
-                { label: 'Follow-up',  value: followupBody ? 'Yes — in 3 days if no reply' : 'None', color: followupBody ? 'var(--green)' : 'var(--muted)' },
-                { label: 'Schedule',   value: scheduleType === 'now' ? 'Immediate' : scheduleType === 'once' ? `Once at ${scheduleDate}` : `Every ${recurrenceDays} days` },
+                { label: 'Follow-up', value: followupBody ? 'Yes — in 3 days if no reply' : 'None', color: followupBody ? 'var(--green)' : 'var(--muted)' },
+                { label: 'Schedule', value: scheduleType === 'now' ? 'Immediate' : scheduleType === 'once' ? `Once at ${scheduleDate}` : `Every ${recurrenceDays} days` },
               ].map(s => (
                 <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--muted)' }}>{s.label}</span>

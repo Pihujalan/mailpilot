@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Send, MessageSquare, TrendingUp, Zap, Plus, ChevronRight, Clock, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL
 
 // Helper — always reads the latest token from localStorage
 const authHeaders = () => ({
@@ -30,11 +30,11 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 }
 
 const STATUS_CONFIG = {
-  draft:     { color: 'var(--muted)',  label: 'Draft',     icon: AlertCircle },
-  scheduled: { color: '#f59e0b',       label: 'Scheduled', icon: Clock },
-  sending:   { color: 'var(--accent)', label: 'Sending',   icon: RefreshCw },
-  active:    { color: 'var(--green)',  label: 'Active',    icon: CheckCircle },
-  completed: { color: 'var(--muted)',  label: 'Completed', icon: CheckCircle },
+  draft: { color: 'var(--muted)', label: 'Draft', icon: AlertCircle },
+  scheduled: { color: '#f59e0b', label: 'Scheduled', icon: Clock },
+  sending: { color: 'var(--accent)', label: 'Sending', icon: RefreshCw },
+  active: { color: 'var(--green)', label: 'Active', icon: CheckCircle },
+  completed: { color: 'var(--muted)', label: 'Completed', icon: CheckCircle },
 }
 
 export default function Dashboard({ user }) {
@@ -54,7 +54,7 @@ export default function Dashboard({ user }) {
     try {
       const [camRes, statRes] = await Promise.all([
         fetch(`${API}/campaigns`, { headers: authHeaders() }),
-        fetch(`${API}/stats`,     { headers: authHeaders() }),
+        fetch(`${API}/stats`, { headers: authHeaders() }),
       ])
 
       // Token expired or invalid — log out
@@ -111,10 +111,10 @@ export default function Dashboard({ user }) {
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <StatCard icon={Zap}           label="Total Campaigns"   value={stats?.total_campaigns ?? '—'} color="var(--accent)" />
-        <StatCard icon={Send}          label="Emails Sent"        value={stats?.total_sent ?? '—'}       color="#60a5fa" />
-        <StatCard icon={MessageSquare} label="Replies Received"   value={stats?.total_replied ?? '—'}    color="var(--green)" />
-        <StatCard icon={TrendingUp}    label="Reply Rate"         value={stats ? `${stats.reply_rate}%` : '—'} color="var(--accent2)"
+        <StatCard icon={Zap} label="Total Campaigns" value={stats?.total_campaigns ?? '—'} color="var(--accent)" />
+        <StatCard icon={Send} label="Emails Sent" value={stats?.total_sent ?? '—'} color="#60a5fa" />
+        <StatCard icon={MessageSquare} label="Replies Received" value={stats?.total_replied ?? '—'} color="var(--green)" />
+        <StatCard icon={TrendingUp} label="Reply Rate" value={stats ? `${stats.reply_rate}%` : '—'} color="var(--accent2)"
           sub={stats?.active_campaigns ? `${stats.active_campaigns} active` : null} />
       </div>
 

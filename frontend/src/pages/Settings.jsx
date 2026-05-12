@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Check, Eye, EyeOff, ExternalLink } from 'lucide-react'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL
 const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem('mailpilot_token')}`,
 })
@@ -43,14 +43,14 @@ export default function Settings({ user, login }) {
     try {
       const res = await fetch(`${API}/settings`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           ...authHeaders()
         },
         body: JSON.stringify({ ai_provider: provider, ai_api_key: apiKey })
       })
       if (!res.ok) throw new Error('Failed to save')
-      
+
       // Update local user
       const updatedUser = { ...user, ai_provider: provider, has_api_key: true }
       localStorage.setItem('mailpilot_user', JSON.stringify(updatedUser))
@@ -157,8 +157,8 @@ export default function Settings({ user, login }) {
           {user?.picture
             ? <img src={user.picture} style={{ width: 44, height: 44, borderRadius: '50%' }} />
             : <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>
-                {user?.name?.[0]}
-              </div>
+              {user?.name?.[0]}
+            </div>
           }
           <div>
             <div style={{ fontWeight: 600, fontSize: 15 }}>{user?.name}</div>

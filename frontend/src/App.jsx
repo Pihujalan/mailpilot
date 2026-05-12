@@ -6,7 +6,7 @@ import NewCampaign from './pages/NewCampaign'
 import Settings from './pages/Settings'
 import CampaignDetail from './pages/CampaignDetail'
 import Layout from './components/Layout'
-
+const API = import.meta.env.VITE_API_URL
 export default function App() {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('mailpilot_user')
@@ -66,13 +66,13 @@ function AuthCallback({ login, children }) {
 
     if (code) {
       // Exchange the one-time code for a real JWT
-      fetch(`http://localhost:8000/auth/token?code=${code}`, {
+      fetch(`${API}/auth/token?code=${code}`, {
         method: 'POST',
       })
         .then(r => r.json())
         .then(({ access_token }) => {
           if (!access_token) throw new Error('No token')
-          return fetch('http://localhost:8000/auth/me', {
+          return fetch(`${API}/auth/me`, {
             headers: { Authorization: `Bearer ${access_token}` },
           })
             .then(r => r.json())

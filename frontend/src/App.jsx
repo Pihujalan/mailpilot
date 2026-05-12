@@ -79,19 +79,19 @@ function AuthCallback({ login, children }) {
             .then(user => {
               login(user, access_token)
               setDone(true)
-              navigate('/dashboard', { replace: true })
+              window.history.replaceState({}, document.title, "/dashboard")
             })
         })
         .catch(() => {
           setDone(true)
-          navigate('/', { replace: true })
+          window.location.href = "/"
         })
     } else if (existingToken) {
       // Already logged in — just show the dashboard
       setDone(true)
     } else {
       // No code, no token — back to landing
-      navigate('/', { replace: true })
+      window.location.href = "/"
     }
   }, [])
 

@@ -29,93 +29,45 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Landing user={user} />} />
+      <Route path="/" element={<Landing user={user} login={login} />} />
       <Route path="/dashboard" element={
-        <AuthCallback login={login}>
+        <RequireAuth>
           <Layout user={user} logout={logout}>
             <Dashboard user={user} />
           </Layout>
-        </AuthCallback>
+        </RequireAuth>
       } />
       <Route path="/new-campaign" element={
-        <Layout user={user} logout={logout}>
-          <NewCampaign user={user} />
-        </Layout>
+        <RequireAuth>
+          <Layout user={user} logout={logout}>
+            <NewCampaign user={user} />
+          </Layout>
+        </RequireAuth>
       } />
       <Route path="/campaign/:id" element={
-        <Layout user={user} logout={logout}>
-          <CampaignDetail user={user} />
-        </Layout>
+        <RequireAuth>
+          <Layout user={user} logout={logout}>
+            <CampaignDetail user={user} />
+          </Layout>
+        </RequireAuth>
       } />
       <Route path="/settings" element={
-        <Layout user={user} logout={logout}>
-          <Settings user={user} setUser={setUser} login={login} />
-        </Layout>
+        <RequireAuth>
+          <Layout user={user} logout={logout}>
+            <Settings user={user} setUser={setUser} login={login} />
+          </Layout>
+        </RequireAuth>
       } />
     </Routes>
   )
 }
 
-// Flow:
-// 1. User clicks Sign in → /auth/login on backend
-// 2. Google redirects to backend /auth/callback?code=
-// 3. Backend exchanges code, issues JWT, redirects to frontend /dashboard?token=JWT
-// 4. This component reads ?token=, calls /auth/me, saves user+token, navigates cleanly
-function AuthCallback({ login, children }) {
-  const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    const token = searchParams.get('token')
-    const existingToken = localStorage.getItem('mailpilot_token')
-
-    if (token) {
-      // Fresh OAuth login — backend gave us JWT in URL
-      fetch(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(r => {
-          if (!r.ok) throw new Error('Auth failed')
-          return r.json()
-        })
-        .then(userData => {
-          login(userData, token)
-          setDone(true)
-          navigate('/dashboard', { replace: true })
-        })
-        .catch(() => {
-          localStorage.removeItem('mailpilot_user')
-          localStorage.removeItem('mailpilot_token')
-          window.location.href = '/'
-        })
-    } else if (existingToken) {
-      // Already logged in — re-validate token
-      fetch(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${existingToken}` },
-      })
-        .then(r => {
-          if (!r.ok) throw new Error('Token expired')
-          return r.json()
-        })
-        .then(userData => {
-          login(userData, existingToken)
-          setDone(true)
-        })
-        .catch(() => {
-          localStorage.removeItem('mailpilot_user')
-          localStorage.removeItem('mailpilot_token')
-          window.location.href = '/'
-        })
-    } else {
-      window.location.href = '/'
-    }
-  }, [])
-
-  if (!done) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-      <div className="spinner" />
-    </div>
-  )
+// Protects routes — redirects to / if not logged in
+function RequireAuth({ children }) {
+  const token = localStorage.getItem('mailpilot_token')
+  if (!token) {
+    window.location.href = '/'
+    return null
+  }
   return children
 }

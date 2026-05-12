@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[start]
+cmd = "celery -A celery_worker worker --beat --loglevel=info"

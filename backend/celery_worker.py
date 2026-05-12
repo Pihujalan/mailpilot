@@ -58,9 +58,14 @@ celery_app.conf.update(
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+# ─── Persistent Event Loop ───────────────────────────────────────────────────
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 def _run(coro):
-    """Run an async coroutine from a sync Celery task using asyncio.run()."""
-    return asyncio.run(coro)
+    """Run async coroutine inside persistent Celery event loop."""
+    return loop.run_until_complete(coro)
 
 
 def _build_cred_dict(user) -> dict:

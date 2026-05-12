@@ -6,8 +6,25 @@ export default function Landing({ user }) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (user) navigate('/dashboard')
-  }, [user])
+  const checkAuth = async () => {
+    try {
+      const res = await fetch(
+        `${API}/auth/me`,
+        {
+          credentials: 'include',
+        }
+      )
+
+      if (res.ok) {
+        navigate('/dashboard')
+      }
+    } catch (err) {
+      console.log(err)
+    }
+  }
+
+  checkAuth()
+}, [])
 
   const handleLogin = async () => {
     const API = import.meta.env.VITE_API_URL

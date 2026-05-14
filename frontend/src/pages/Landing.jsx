@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Zap, Send, RefreshCw, Bell, ArrowRight } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL
@@ -147,6 +147,42 @@ export default function Landing({ user, login }) {
           </div>
         ))}
       </div>
+
+      <footer
+        style={{
+          textAlign: 'center',
+          padding: '40px',
+          borderTop: '1px solid var(--border)',
+          color: 'var(--muted)'
+        }}
+      >
+        <div style={{
+          display:'flex',
+          justifyContent:'center',
+          gap:'24px',
+          marginBottom:'12px'
+        }}>
+
+          <Link
+            to="/privacy"
+            style={{color:'inherit', textDecoration:'none'}}
+          >
+            Privacy Policy
+          </Link>
+
+          <Link
+            to="/terms"
+            style={{color:'inherit', textDecoration:'none'}}
+          >
+            Terms of Service
+          </Link>
+
+        </div>
+
+        <p>Contact: jpihu108@gmail.com</p>
+
+      </footer>
+
     </div>
   )
 }

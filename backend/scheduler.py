@@ -5,7 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import AsyncSessionLocal, Campaign, EmailLog, User
 from email_sender import send_email, check_for_reply
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import os
 
@@ -72,8 +72,8 @@ async def process_campaign_sending(campaign_id: str, is_recurring: bool = False)
                     status="sent" if result["success"] else "failed",
                     gmail_message_id=result.get("message_id"),
                     gmail_thread_id=result.get("thread_id"),
-                    sent_at=datetime.utcnow() if result["success"] else None,
-                    next_followup_at=datetime.utcnow() + timedelta(days=3) if result["success"] else None,
+                    sent_at=datetime.now(timezone.utc) if result["success"] else None,
+                    next_followup_at=datetime.now(timezone.utc) + timedelta(days=3) if result["success"] else None,
                 )
                 session.add(log)
 
@@ -125,7 +125,7 @@ async def check_replies_job():
                     await session.execute(
                         update(EmailLog).where(EmailLog.id == log.id).values(
                             status="replied",
-                            replied_at=datetime.utcnow()
+                            replied_at=datetime.now(timezone.utc)
                         )
                     )
                     print(f"Reply detected from {log.recipient} on campaign {log.campaign_id}")
@@ -140,7 +140,7 @@ async def send_followups_job():
     """Runs every hour to send scheduled follow-ups."""
     async with AsyncSessionLocal() as session:
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             result = await session.execute(
                 select(EmailLog).where(
                     EmailLog.status == "sent",
@@ -214,7 +214,7 @@ def schedule_campaign(campaign_id: str, schedule_type: str, send_at: datetime = 
         )
         print(f"Recurring campaign {campaign_id} scheduled every {recurrence_days} day(s)")
 
-    elif schedule_type == "once" and send_at and send_at > datetime.utcnow():
+    elif schedule_type == "once" and send_at and send_at > datetime.now(timezone.utc):
         scheduler.add_job(
             process_campaign_sending,
             DateTrigger(run_date=send_at),

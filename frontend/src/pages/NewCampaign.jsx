@@ -96,7 +96,10 @@ export default function NewCampaign({ user }) {
           followup_subject: followupSubject,
           followup_body: followupBody,
           schedule_type: scheduleType,
-          schedule_datetime: scheduleType === 'once' ? scheduleDate : null,
+          schedule_datetime:
+            scheduleType === 'once'
+              ? new Date(scheduleDate).toISOString()
+              : null,
           recurrence_days: scheduleType === 'recurring' ? recurrenceDays : null,
         })
       })
@@ -312,7 +315,9 @@ export default function NewCampaign({ user }) {
             <div style={{ marginBottom: 20 }}>
               <label>Send Date & Time</label>
               <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)} />
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+                  .toISOString()
+                  .slice(0, 16)} />
             </div>
           )}
 

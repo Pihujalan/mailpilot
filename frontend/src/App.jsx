@@ -6,6 +6,8 @@ import NewCampaign from './pages/NewCampaign'
 import Settings from './pages/Settings'
 import CampaignDetail from './pages/CampaignDetail'
 import Layout from './components/Layout'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -58,6 +60,8 @@ export default function App() {
           </Layout>
         </RequireAuth>
       } />
+      <Route path="/privacy" element={<Privacy />} />
+<Route path="/terms" element={<Terms />} />
     </Routes>
   )
 }
